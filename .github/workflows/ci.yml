@@ -10,6 +10,8 @@ on:
 
 jobs:
   build-test:
+    permissions:
+      contents: write
     strategy:
       matrix:
         os: [ubuntu-latest]
@@ -36,7 +38,7 @@ jobs:
       - name: Install Tarpaulin
         run: cargo install cargo-tarpaulin
       - name: Coverage
-        run: cargo tarpaulin --out Xml --out Json --output-dir target/tarpaulin --workspace
+        run: cargo tarpaulin --out Xml --out Json --out Html --output-dir target/tarpaulin --workspace
       - name: Install jq
         run: sudo apt-get update && sudo apt-get install -y jq
       - name: Coverage Summary
@@ -53,6 +55,30 @@ jobs:
             echo "### Coverage" >> $GITHUB_STEP_SUMMARY
             echo "Coverage report generated (see artifacts)." >> $GITHUB_STEP_SUMMARY
           fi
+      - name: Update Coverage Badge (main only)
+        if: github.ref == 'refs/heads/main'
+        run: |
+          mkdir -p coverage
+          pct=""
+          if [ -f target/tarpaulin/tarpaulin-report.json ]; then
+            pct=$(jq -r '.coverage // empty' target/tarpaulin/tarpaulin-report.json)
+          fi
+          color="lightgrey"
+          if [ -n "$pct" ]; then
+            val=${pct%%%}
+            if [ "$val" -ge 90 ]; then color="brightgreen"; elif [ "$val" -ge 80 ]; then color="green"; elif [ "$val" -ge 70 ]; then color="yellow"; else color="orange"; fi
+            msg="${pct}"
+          else
+            msg="n/a"
+          fi
+          cat > coverage/badge.json <<EOF
+          {"schemaVersion":1,"label":"coverage","message":"${msg}","color":"${color}"}
+          EOF
+          git config user.name "github-actions"
+          git config user.email "github-actions@github.com"
+          git add coverage/badge.json
+          git commit -m "Update coverage badge"
+          git push
       - name: Upload Coverage Artifact
         uses: actions/upload-artifact@v4
         with:

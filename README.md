@@ -1,6 +1,7 @@
 # ercs
 
 [![CI](https://github.com/dungeon2567/Ercs/actions/workflows/ci.yml/badge.svg)](https://github.com/dungeon2567/Ercs/actions/workflows/ci.yml)
+[![Coverage](https://img.shields.io/endpoint?url=https://raw.githubusercontent.com/dungeon2567/Ercs/main/coverage/badge.json)](https://github.com/dungeon2567/Ercs/actions/workflows/ci.yml)
 
 ## Description
 
@@ -17,12 +18,6 @@ Bitmask-based hierarchical ECS. Storages are organized in blocks (dense and spar
 
 - Build: `cargo build`
 - Test: `cargo test`
-
-## Coverage (local)
-
-- Install: `cargo install cargo-tarpaulin`
-- Run: `cargo tarpaulin --out Html`
-- Open: `tarpaulin-report.html`
 
 ## CI
 
