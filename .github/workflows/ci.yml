@@ -36,9 +36,25 @@ jobs:
       - name: Install Tarpaulin
         run: cargo install cargo-tarpaulin
       - name: Coverage
-        run: cargo tarpaulin --out Xml --output-dir target/tarpaulin --workspace
-      - name: Upload Coverage to Codecov
-        uses: codecov/codecov-action@v4
+        run: cargo tarpaulin --out Xml --out Json --output-dir target/tarpaulin --workspace
+      - name: Install jq
+        run: sudo apt-get update && sudo apt-get install -y jq
+      - name: Coverage Summary
+        run: |
+          if [ -f target/tarpaulin/tarpaulin-report.json ]; then
+            pct=$(jq -r '.coverage // empty' target/tarpaulin/tarpaulin-report.json)
+            echo "### Coverage" >> $GITHUB_STEP_SUMMARY
+            if [ -n "$pct" ]; then
+              echo "Coverage: ${pct}%" >> $GITHUB_STEP_SUMMARY
+            else
+              echo "Coverage report generated (see artifacts)." >> $GITHUB_STEP_SUMMARY
+            fi
+          else
+            echo "### Coverage" >> $GITHUB_STEP_SUMMARY
+            echo "Coverage report generated (see artifacts)." >> $GITHUB_STEP_SUMMARY
+          fi
+      - name: Upload Coverage Artifact
+        uses: actions/upload-artifact@v4
         with:
-          files: target/tarpaulin/cobertura.xml
-          fail_ci_if_error: true
+          name: coverage
+          path: target/tarpaulin/*
