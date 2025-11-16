@@ -33,3 +33,12 @@ jobs:
         run: cargo build --verbose --all-targets
       - name: Test
         run: cargo test --verbose --all
+      - name: Install Tarpaulin
+        run: cargo install cargo-tarpaulin
+      - name: Coverage
+        run: cargo tarpaulin --out Xml --output-dir target/tarpaulin --workspace
+      - name: Upload Coverage to Codecov
+        uses: codecov/codecov-action@v4
+        with:
+          files: target/tarpaulin/cobertura.xml
+          fail_ci_if_error: true
