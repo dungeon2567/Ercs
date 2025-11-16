@@ -1,0 +1,10 @@
+[package]
+name = "ercs"
+version = "0.1.0"
+edition = "2024"
+
+[dependencies]
+bumpalo = { version = "3.19.0", features = ["allocator_api"] }
+component = "0.1.1"
+transparent = "0.4.2"
+ercs_macros = { path = "ercs_macros" }
