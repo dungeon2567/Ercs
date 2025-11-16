@@ -68,12 +68,22 @@ jobs:
             pct=$(jq -r '.coverage // empty' target/tarpaulin/tarpaulin-report.json)
           fi
           color="lightgrey"
+          msg="n/a"
           if [ -n "$pct" ]; then
-            val=${pct%%%}
-            if [ "$val" -ge 90 ]; then color="brightgreen"; elif [ "$val" -ge 80 ]; then color="green"; elif [ "$val" -ge 70 ]; then color="yellow"; else color="orange"; fi
-            msg="${pct}"
-          else
-            msg="n/a"
+            # pct is a float like 68.137..., format message and derive integer bucket
+            msg="$(printf '%.2f' "$pct")%"
+            val_int="$(printf '%.0f' "$pct" 2>/dev/null || echo '')"
+            if [ -n "$val_int" ]; then
+              if [ "$val_int" -ge 90 ]; then
+                color="brightgreen"
+              elif [ "$val_int" -ge 80 ]; then
+                color="green"
+              elif [ "$val_int" -ge 70 ]; then
+                color="yellow"
+              else
+                color="orange"
+              fi
+            fi
           fi
           cat > coverage/badge.json <<EOF
           {"schemaVersion":1,"label":"coverage","message":"${msg}","color":"${color}"}
