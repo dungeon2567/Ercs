@@ -33,8 +33,12 @@ jobs:
             ${{ runner.os }}-cargo-
       - name: Build
         run: cargo build --verbose --all-targets
-      - name: Test
-        run: cargo test --verbose --all
+      - name: Install Miri
+        run: rustup component add miri
+      - name: Miri Setup
+        run: cargo miri setup
+      - name: Test (Miri)
+        run: cargo miri test --verbose --all
       - name: Install Tarpaulin
         run: cargo install cargo-tarpaulin
       - name: Coverage
