@@ -10,17 +10,20 @@ use crate::tick::{Tick, TickDelta};
 
 #[derive(Default, Debug, Clone, Copy)]
 #[repr(C)]
-pub struct SparseHeader {
-    pub absence_mask: u128
-}
+pub struct SparseHeader { pub absence_mask: u128 }
 
 #[derive(Default, Debug, Clone, Copy)]
 #[repr(C)]
 pub struct DenseHeader { }
 
+pub trait MutBlock<T> {
+    fn set_all(&mut self, mask: u128);
+}
+
 #[repr(C)]
 pub struct Block<T, H: Default, A> {
     pub presence_mask: u128,
+    pub absence_mask: u128,
     pub changed_at: Tick,
     pub header: H,
     pub alloc: A,
@@ -89,6 +92,7 @@ impl<T: Sized, A: Allocator + Copy> DenseBlock<T, A> {
             Self {
                 inner: Block {
                     presence_mask: 0,
+                    absence_mask: 0,
                     changed_at: Tick::new(0),
                     header: DenseHeader {},
                     data: Vec::with_capacity_in(capacity, alloc),
@@ -98,7 +102,9 @@ impl<T: Sized, A: Allocator + Copy> DenseBlock<T, A> {
             alloc,
         )
     }
+}
 
+impl<T, A: Allocator + Copy> DenseBlock<T, A> {
     pub fn set_all(&mut self, mask: u128) {
         self.inner.presence_mask |= mask;
     }
@@ -109,6 +115,7 @@ impl<T: Sized, A: Allocator + Copy> SparseBlock<T, A> {
         Self {
             inner: Block {
                 presence_mask: 0,
+                absence_mask: 0,
                 header: SparseHeader { absence_mask: 0 },
                 data: std::array::from_fn(|_| MaybeUninit::uninit()),
                 changed_at: Tick::new(0),
@@ -124,6 +131,7 @@ impl<T: Sized, A: Allocator + Copy> SparseBlock<T, A> {
             Self {
                 inner: Block {
                     presence_mask: 0,
+                    absence_mask: 0,
                     header: SparseHeader { absence_mask: 0  },
                     data: std::array::from_fn(|_| MaybeUninit::uninit()),
                     changed_at: Tick::new(0),
@@ -133,22 +141,6 @@ impl<T: Sized, A: Allocator + Copy> SparseBlock<T, A> {
             alloc,
         )
     }
-
-    pub fn set_all(&mut self, mask: u128) {
-        self.header.absence_mask &= !mask;
-        self.presence_mask |= mask;
-    }
-
-    pub fn skip_all(&mut self, mask: u128) {
-        self.presence_mask &= !mask;
-        self.header.absence_mask |= mask;
-    }
-
-    pub fn clear_all(&mut self, mask: u128) {
-        self.presence_mask &= !mask;
-        self.header.absence_mask &= !mask;
-    }
-
 }
 
 impl<T: Sized> Default for SparseBlock<T, Global> {
@@ -213,6 +205,21 @@ impl<T, H: Default, A> Block<T, H, A> {
     pub fn has_any(&self, mask: u128) -> bool {
         (self.presence_mask & mask) != 0
     }
+
+    pub fn set_all(&mut self, mask: u128) {
+        self.absence_mask &= !mask;
+        self.presence_mask |= mask;
+    }
+
+    pub fn skip_all(&mut self, mask: u128) {
+        self.presence_mask &= !mask;
+        self.absence_mask |= mask;
+    }
+
+    pub fn clear_all(&mut self, mask: u128) {
+        self.presence_mask &= !mask;
+        self.absence_mask &= !mask;
+    }
 }
 
 
@@ -230,7 +237,7 @@ mod tests {
         let b = SparseBlock::<u32, Global>::new_in(Global);
 
         assert_eq!(b.presence_mask, 0);
-        assert_eq!(b.header.absence_mask, 0);
+        assert_eq!(b.absence_mask, 0);
 
         assert_eq!(b.count(), 0);
         assert!(!b.has(0));
@@ -241,7 +248,7 @@ mod tests {
         let mut b = SparseBlock::<u32, Global>::new_in(Global);
         b.set_all(0b101);
         assert_eq!(b.presence_mask, 0b101);
-        assert_eq!(b.header.absence_mask, 0);
+        assert_eq!(b.absence_mask, 0);
 
         b.set_all(0b111);
         assert_eq!(b.presence_mask, 0b111);
@@ -251,10 +258,10 @@ mod tests {
     #[test]
     fn sparse_block_set_all_clears_overlapping_skip_bits() {
         let mut b = SparseBlock::<u32, Global>::new_in(Global);
-        b.header.absence_mask = 0b101;
+        b.absence_mask = 0b101;
         b.set_all(0b111);
         assert_eq!(b.presence_mask, 0b111);
-        assert_eq!(b.header.absence_mask, 0);
+        assert_eq!(b.absence_mask, 0);
     }
 
     #[test]
@@ -265,7 +272,7 @@ mod tests {
         b.set_all(0b1011);
         b.clear_all(0b0001);
         assert_eq!(b.presence_mask, 0b1010);
-        assert_eq!(b.header.absence_mask, 0);
+        assert_eq!(b.absence_mask, 0);
     }
 
     #[test]
@@ -273,7 +280,7 @@ mod tests {
         let mut b = SparseBlock::<u32, Global>::new_in(Global);
         b.skip_all(0b0101);
         b.clear_all(0b0001);
-        assert_eq!(b.header.absence_mask, 0b0100);
+        assert_eq!(b.absence_mask, 0b0100);
         assert_eq!(b.presence_mask, 0);
     }
 
@@ -284,20 +291,20 @@ mod tests {
         b.skip_all(0b1000);
         b.clear_all(0b1011);
         assert_eq!(b.presence_mask, 0);
-        assert_eq!(b.header.absence_mask, 0);
+        assert_eq!(b.absence_mask, 0);
     }
 
     #[test]
     fn invariant_disjointness_after_set_and_skip_sequences() {
         let mut b = SparseBlock::<u32, Global>::new_in(Global);
         let _ = b.set_all(0b0110);
-        assert_eq!(b.presence_mask & b.header.absence_mask, 0);
+        assert_eq!(b.presence_mask & b.absence_mask, 0);
         let _ = b.skip_all(0b0011);
-        assert_eq!(b.presence_mask & b.header.absence_mask, 0);
+        assert_eq!(b.presence_mask & b.absence_mask, 0);
         let _ = b.set_all(0b1111);
-        assert_eq!(b.presence_mask & b.header.absence_mask, 0);
+        assert_eq!(b.presence_mask & b.absence_mask, 0);
         let _ = b.skip_all(0b1100);
-        assert_eq!(b.presence_mask & b.header.absence_mask, 0);
+        assert_eq!(b.presence_mask & b.absence_mask, 0);
     }
 
     #[test]
@@ -306,8 +313,8 @@ mod tests {
         b.set_all(0b0101);
         b.set_all(0b0101);
         assert_eq!(b.presence_mask, 0b0101);
-        assert_eq!(b.header.absence_mask, 0);
-        assert_eq!(b.presence_mask & b.header.absence_mask, 0);
+        assert_eq!(b.absence_mask, 0);
+        assert_eq!(b.presence_mask & b.absence_mask, 0);
     }
 
     #[test]
@@ -315,9 +322,9 @@ mod tests {
         let mut b = SparseBlock::<u32, Global>::new_in(Global);
         b.skip_all(0b1010);
         b.skip_all(0b1010);
-        assert_eq!(b.header.absence_mask, 0b1010);
+        assert_eq!(b.absence_mask, 0b1010);
         assert_eq!(b.presence_mask, 0);
-        assert_eq!(b.presence_mask & b.header.absence_mask, 0);
+        assert_eq!(b.presence_mask & b.absence_mask, 0);
     }
 
     #[test]
@@ -326,18 +333,18 @@ mod tests {
         let _ = b.set_all(0b1010);
         let _ = b.skip_all(0b1000);
         assert_eq!(b.presence_mask, 0b0010);
-        assert_eq!(b.header.absence_mask, 0b1000);
-        assert_eq!(b.presence_mask & b.header.absence_mask, 0);
+        assert_eq!(b.absence_mask, 0b1000);
+        assert_eq!(b.presence_mask & b.absence_mask, 0);
     }
 
     #[test]
     fn skip_then_set_same_bits_disjoint_result() {
-        let mut b = SparseBlock::<u32>::new_in(Global);
+        let mut b = SparseBlock::<u32, Global>::new_in(Global);
         let _ = b.skip_all(0b1001);
         let _ = b.set_all(0b0001);
-        assert_eq!(b.header.absence_mask, 0b1000);
+        assert_eq!(b.absence_mask, 0b1000);
         assert_eq!(b.presence_mask, 0b0001);
-        assert_eq!(b.presence_mask & b.header.absence_mask, 0);
+        assert_eq!(b.presence_mask & b.absence_mask, 0);
     }
 
     #[test]

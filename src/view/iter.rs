@@ -136,7 +136,7 @@ impl<'a, T, A> IterViews<'a, T> for SparseBlock<T, A> {
 impl<'a, T, A> SparseBlock<T, A> {
     pub fn views_complement(&'a self) -> RunsIter<'a, T> {
         let data_t: &[T] = unsafe { std::slice::from_raw_parts(self.data.as_ptr() as *const T, 128) };
-        let effective = (self.presence_mask & !self.header.absence_mask);
+        let effective = (self.presence_mask & !self.absence_mask);
         RunsIter { data: data_t, mask: effective }
     }
 }
@@ -201,7 +201,7 @@ mod tests {
         for &i in &[1usize, 2usize, 3usize, 4usize, 8usize, 9usize] { unsafe { s.data[i].write(i as u32); } }
         let sel = (1u128<<1)|(1u128<<2)|(1u128<<3)|(1u128<<4)|(1u128<<8)|(1u128<<9);
         s.set_all(sel);
-        s.header.absence_mask |= (1u128<<2)|(1u128<<9);
+        s.skip_all((1u128<<2)|(1u128<<9));
         let runs: Vec<usize> = s.views_complement().map(|v| v.len()).collect();
         assert_eq!(runs, vec![1, 2, 1]);
     }

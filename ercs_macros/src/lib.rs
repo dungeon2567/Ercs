@@ -1,6 +1,6 @@
 use proc_macro::TokenStream;
 use quote::{quote, format_ident};
-use syn::{parse_macro_input, ItemFn, FnArg, PatType, Type, TypePath, TypeReference, PathArguments, GenericArgument, Item, Meta, Expr, ExprLit, Lit};
+use syn::{parse_macro_input, ItemFn, FnArg, PatType, Type, TypePath, TypeReference, PathArguments, GenericArgument, Item, Meta, Expr, ExprLit, Lit, DeriveInput};
 
 fn pascalize(s: &str) -> String {
     let mut out = String::new();
@@ -92,8 +92,20 @@ pub fn system(attr: TokenStream, item: TokenStream) -> TokenStream {
                 let a_store = &a_cell.root;
                 let b_store = &b_cell.root;
 
-                for (a_view, b_view) in intersect(a_store.views(), b_store.views()) {
-                    #fn_ident(&a_view, &b_view);
+                for (a_l1_view, b_l1_view) in intersect(a_store.views(), b_store.views()) {
+                    let a_l1_slice = a_l1_view.as_slice();
+                    let b_l1_slice = b_l1_view.as_slice();
+                    for (a_l1_block, b_l1_block) in a_l1_slice.iter().zip(b_l1_slice.iter()) {
+                        for (a_l2_view, b_l2_view) in intersect(a_l1_block.views(), b_l1_block.views()) {
+                            let a_l2_slice = a_l2_view.as_slice();
+                            let b_l2_slice = b_l2_view.as_slice();
+                            for (a_l2_block, b_l2_block) in a_l2_slice.iter().zip(b_l2_slice.iter()) {
+                                for (a_leaf_view, b_leaf_view) in intersect(a_l2_block.views(), b_l2_block.views()) {
+                                    #fn_ident(&a_leaf_view, &b_leaf_view);
+                                }
+                            }
+                        }
+                    }
                 }
             }
         }
@@ -114,6 +126,19 @@ pub fn derive_component(_attr: TokenStream, item: TokenStream) -> TokenStream {
     let expanded = quote! {
         #ast
         impl crate::component::Component for #ident {}
+    };
+    TokenStream::from(expanded)
+}
+
+#[proc_macro_derive(Component)]
+pub fn derive_component_trait(input: TokenStream) -> TokenStream {
+    let ast = parse_macro_input!(input as DeriveInput);
+    let ident = ast.ident;
+    let generics = ast.generics;
+    let (impl_generics, ty_generics, where_clause) = generics.split_for_impl();
+
+    let expanded = quote! {
+        impl #impl_generics crate::component::Component for #ident #ty_generics #where_clause {}
     };
     TokenStream::from(expanded)
 }

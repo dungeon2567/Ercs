@@ -21,21 +21,13 @@ pub struct DenseStorage<T: Component, A: Allocator + Copy> {
 }
 
 pub struct SparseStorage<T: Component, A: Allocator + Copy + Default> {
-    pub root: SparseBlock<T, A>,
+    pub root: SparseBlock<Box<SparseBlock<Box<SparseBlock<T, A>, A>, A>, A>, A>,
     pub alloc: A
 }
 
 impl<T: Component, A: Allocator + Copy + Default>  SparseStorage<T, A> {
     pub fn new(alloc: A) -> Self {
         Self { root: SparseBlock::new(alloc), alloc }
-    }
-
-    pub fn leaf_mut(&mut self) -> &mut SparseBlock<T, A> {
-        &mut self.root
-    }
-
-    pub fn leaf(&self) -> &SparseBlock<T, A> {
-        &self.root
     }
 }
 
